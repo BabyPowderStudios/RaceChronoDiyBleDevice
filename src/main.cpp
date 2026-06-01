@@ -30,7 +30,7 @@ CAN_device_t CAN_cfg;
 
 namespace {
 
-constexpr char kDeviceName[] = "BLE CAN device demo";
+constexpr char kDeviceName[] = "RaceChrono CAN Bridge";
 constexpr gpio_num_t kCanTxPin = static_cast<gpio_num_t>(CAN_TX_PIN);
 constexpr gpio_num_t kCanRxPin = static_cast<gpio_num_t>(CAN_RX_PIN);
 constexpr uint32_t kCanRestartDelayMs = 1000;
