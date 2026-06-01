@@ -1,5 +1,6 @@
 #if defined(ARDUINO_ARCH_ESP32)
 
+#include <Arduino.h>
 #include <NimBLEDevice.h>
 #include "RaceChrono.h"
 
@@ -22,9 +23,15 @@ public:
   void sendCanData(uint32_t pid, const uint8_t *data, uint8_t len);
 
 private:
-  void onWrite(BLECharacteristic *characteristic);
+  void onWrite(NimBLECharacteristic *characteristic, NimBLEConnInfo &connInfo) override;
+  void onStatus(NimBLECharacteristic *characteristic, NimBLEConnInfo &connInfo, int code) override;
+  void onSubscribe(
+      NimBLECharacteristic *characteristic,
+      NimBLEConnInfo &connInfo,
+      uint16_t subValue) override;
 
   RaceChronoBleCanHandler *_handler;
+  bool _canDataNotificationsEnabled;
 
   BLEServer *_bleServer;
   BLEService *_bleService;
@@ -37,6 +44,7 @@ RaceChronoBleAgentESP32 RaceChronoESP32Instance;
 
 RaceChronoBleAgentESP32::RaceChronoBleAgentESP32() :
     _handler(nullptr),
+  _canDataNotificationsEnabled(false),
     _bleServer(nullptr),
     _bleService(nullptr),
     _pidRequestsCharacteristic(nullptr),
@@ -65,9 +73,12 @@ void RaceChronoBleAgentESP32::setUp(
       _bleService->createCharacteristic(
           CAN_BUS_CHARACTERISTIC_UUID,
           NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    _canBusDataCharacteristic->setCallbacks(this);
 }
 
 void RaceChronoBleAgentESP32::startAdvertising() {
+  _bleServer->start();
+
   NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
   advertising->setMinInterval(32);
   // TODO: Why is this different from the value used for nRF52?
@@ -83,6 +94,10 @@ bool RaceChronoBleAgentESP32::isConnected() const {
 
 void RaceChronoBleAgentESP32::sendCanData(
     uint32_t pid, const uint8_t *data, uint8_t len) {
+  if (_canBusDataCharacteristic == nullptr) {
+    return;
+  }
+
   if (len > 8) {
     len = 8;
   }
@@ -93,13 +108,53 @@ void RaceChronoBleAgentESP32::sendCanData(
   buffer[2] = (pid >> 16) & 0xFF;
   buffer[3] = (pid >> 24) & 0xFF;
   memcpy(buffer + 4, data, len);
-  _canBusDataCharacteristic->setValue(buffer, 4 + len);
-  _canBusDataCharacteristic->notify();
+  if (!_canBusDataCharacteristic->notify(buffer, 4 + len)) {
+    Serial.print("RaceChrono BLE notify failed for PID 0x");
+    Serial.print(pid, HEX);
+    if (!_canDataNotificationsEnabled) {
+      Serial.print(" (client has not enabled notifications)");
+    }
+    Serial.println();
+  }
 }
 
-void RaceChronoBleAgentESP32::onWrite(BLECharacteristic *characteristic) {
+void RaceChronoBleAgentESP32::onWrite(
+    NimBLECharacteristic *characteristic,
+    NimBLEConnInfo &connInfo) {
+  (void)connInfo;
+  if (characteristic != _pidRequestsCharacteristic || _handler == nullptr) {
+    return;
+  }
+
   NimBLEAttValue value = characteristic->getValue();
   _handler->handlePidRequest(value.data(), value.length());
+}
+
+void RaceChronoBleAgentESP32::onStatus(
+    NimBLECharacteristic *characteristic,
+    NimBLEConnInfo &connInfo,
+    int code) {
+  (void)connInfo;
+  if (characteristic != _canBusDataCharacteristic || code == 0) {
+    return;
+  }
+
+  Serial.print("RaceChrono BLE status code: ");
+  Serial.println(code);
+}
+
+void RaceChronoBleAgentESP32::onSubscribe(
+    NimBLECharacteristic *characteristic,
+    NimBLEConnInfo &connInfo,
+    uint16_t subValue) {
+  (void)connInfo;
+  if (characteristic != _canBusDataCharacteristic) {
+    return;
+  }
+
+  _canDataNotificationsEnabled = (subValue & 0x0001U) != 0;
+  Serial.print("RaceChrono data notifications ");
+  Serial.println(_canDataNotificationsEnabled ? "enabled." : "disabled.");
 }
 
 }  // namespace

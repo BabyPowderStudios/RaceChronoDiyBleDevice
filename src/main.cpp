@@ -59,7 +59,7 @@ struct BufferedMessage {
 SettingsStore *settingsStore = nullptr;
 CanTracker *canTracker = nullptr;
 WebUiServer *webUi = nullptr;
-RaceChronoPidMap<PidExtra> pidMap;
+RaceChronoPidMap<PidExtra, kMaxObservedCanIds> pidMap;
 StartupPhase startupPhase = StartupPhase::kSettings;
 bool isCanDriverInstalled = false;
 bool isCanBusReaderActive = false;
@@ -80,6 +80,7 @@ void sendNumCanBusTimeouts();
 void resetSkippedUpdatesCounters();
 void pollRaceChronoConnection();
 uint16_t computeEffectiveDivider(uint32_t pid, uint16_t updateIntervalMs, uint32_t nowMs);
+void restoreDefaultPidForwarding();
 
 void dumpMapToSerial() {
   uint16_t updateIntervalForAllEntries;
@@ -165,9 +166,9 @@ public:
   }
 
   void denyAllPids() {
-    Serial.println("Command: DENY ALL PIDS.");
+    Serial.println("Command: DENY ALL PIDS. Restoring default allow-all forwarding.");
 
-    pidMap.reset();
+    restoreDefaultPidForwarding();
     dumpMapToSerial();
   }
 
@@ -196,12 +197,17 @@ public:
   }
 
   void handleDisconnect() {
-    Serial.println("Resetting the map.");
+    Serial.println("Restoring default allow-all forwarding.");
 
-    pidMap.reset();
+    restoreDefaultPidForwarding();
     dumpMapToSerial();
   }
 } raceChronoHandler;
+
+void restoreDefaultPidForwarding() {
+  pidMap.reset();
+  pidMap.allowAllPids(0);
+}
 
 bool startCanBusReader() {
   Serial.println("Connecting to the CAN bus...");
@@ -401,6 +407,7 @@ void runStartupStep() {
       } else {
         Serial.println("Startup: settings storage ready.");
       }
+      restoreDefaultPidForwarding();
       Serial.flush();
       startupPhase = StartupPhase::kBle;
       return;
