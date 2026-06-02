@@ -123,6 +123,38 @@ the whole device:
 The live table keeps refreshing data without replacing the active form fields,
 so you can edit rules while traffic continues to update.
 
+## Generating DBC documentation
+
+This repository also includes a small generator that converts DBC files into
+RaceChrono formula documentation. It scans every signal in the source DBC,
+builds the corresponding RaceChrono equation, and writes a Markdown table into
+`can_db/`.
+
+By default it reads all `*.dbc` files from `dbc/` and creates matching
+`*.md` files in `can_db/`:
+
+```sh
+bash tools/generate_racechrono_can_db.sh
+```
+
+If you want to point it at a different DBC file or output directory, pass the
+input path first and the output path second:
+
+```sh
+bash tools/generate_racechrono_can_db.sh dbc can_db
+```
+
+The Bash wrapper calls the Python helper in `tools/generate_racechrono_can_db.py`.
+On systems without Bash you can run the helper directly:
+
+```sh
+python tools/generate_racechrono_can_db.py dbc can_db
+```
+
+The generated formulas reconstruct the physical values from the DBC. For
+RaceChrono channels that expect a different internal unit or a more curated
+channel mapping, you may still want to adjust the generated formula manually.
+
 ## Bench testing
 
 Before connecting to a car, it is useful to test with any other CAN node or CAN
